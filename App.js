@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, FlatList } from 'react-native';
+import { StyleSheet, Text, View, FlatList, Button } from 'react-native';
 import React from 'react';
 
 const firebase = require('firebase');
@@ -15,12 +15,14 @@ const firebaseConfig = {
 
 
 
-class App extends React.Component {
+export default class App extends React.Component {
 
   constructor() {
     super();
     this.state = {
       lists: [],
+      uid: 0,
+      loggedInText: 'Please wait, you are being logged in',
     }
     
     
@@ -44,12 +46,33 @@ class App extends React.Component {
 
 
     componentDidMount() {
+      //reference to shoppinglists collection
       this.referenceShoppingLists = firebase.firestore().collection('shoppinglists');
-      this.unsubscribe = this.referenceShoppingLists.onSnapshot(this.onCollectionUpdate)
+
+      // listen for collection changes for current user
+      this.unsubscribeListUser = this.referenceShoppinglistUser.onSnapshot(this.onCollectionUpdate);
+
+      //authentication
+      this.authUnsubscribe = firebase.auth().onAuthStateChanged(async (user) => {
+        if (!user) {
+          await firebase.auth().signInAnonymously();
+        }
+      
+        //update user state with currently active user data
+        this.setState({
+          uid: user.uid,
+          loggedInText: 'Hello there',
+        });
+
+      // create a reference to the active user's documents (shopping lists)
+      this.referenceShoppinglistUser = firebase.firestore().collection('shoppinglists').where("uid", "==", this.state.uid);
+
+      });
     }
     
      componentWillUnmount() {
-       this.unsubscribe();
+       this.unsubscribeListUser();
+       this.authUnsubscribe();
     }
 
     onCollectionUpdate = (querySnapshot) => {
@@ -66,30 +89,50 @@ class App extends React.Component {
       this.setState({
         lists,
       });
-    };
+    }
 
+    addList() {
+      this.referenceShoppingLists.add({
+        name: 'TestList',
+        items: ['eggs', 'pasta', 'veggies'],
+        uid: this.state.uid,
+      });
+    };
 
 
   render(){
   return (
     <View style={styles.container}>
+      <Text>{this.state.loggedInText}</Text>
+
       <Text style={styles.text}>Shopping list data</Text>
       <FlatList
         data={this.state.lists}
         renderItem={({ item }) =>
         <Text style={styles.item}>{item.name}: {item.items}</Text>}
       />
+
+
+      <Button
+      title='Add something'
+        onPress={() => {this.addList()}}
+      />
+
+
     </View>
   );
   }
-  
+
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    paddingTop: 40,     
+    flexDirection: 'column',
+    // justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 70,
+    paddingBottom: 80,
   },
   item: {
     fontSize: 20,
